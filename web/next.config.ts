@@ -16,6 +16,7 @@ export default function nextConfig(phase: string): NextConfig {
     return {
         output: "standalone",
         allowedDevOrigins: isDev ? ["*.*.*.*"] : [],
+        serverExternalPackages: ["better-sqlite3"],
         typescript: {
             ignoreBuildErrors: true,
         },

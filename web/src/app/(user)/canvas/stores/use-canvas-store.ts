@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 
 import { nanoid } from "nanoid";
-import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "../types";
 
@@ -34,29 +33,35 @@ type CanvasStore = {
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
-type PersistedCanvasState = Pick<CanvasStore, "projects">;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let queuedPersistState: PersistedCanvasState | null = null;
 
 const canvasStorage: PersistStorage<CanvasStore> = {
-    getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
-        if (!value) return null;
-        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
-        queuedPersistState = parsed.state as PersistedCanvasState;
-        return parsed;
+    getItem: async () => {
+        if (typeof window === "undefined") return null;
+        try {
+            const res = await fetch("/api/canvas");
+            if (!res.ok) return null;
+            const projects = (await res.json()) as CanvasProject[];
+            return { state: { projects } as Partial<CanvasStore>, version: 0 } as StorageValue<CanvasStore>;
+        } catch {
+            return null;
+        }
     },
-    setItem: (name, value) => {
-        const nextState = value.state as PersistedCanvasState;
-        if (queuedPersistState && queuedPersistState.projects === nextState.projects) return;
-        queuedPersistState = nextState;
+    setItem: (_name, value) => {
+        const projects = value.state.projects || [];
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
             saveTimer = null;
-            void localForageStorage.setItem(name, JSON.stringify(value));
-        }, 400);
+            void fetch("/api/canvas", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(projects) });
+        }, 500);
     },
-    removeItem: (name) => localForageStorage.removeItem(name),
+    removeItem: async () => {
+        try {
+            await fetch("/api/canvas", { method: "PUT", headers: { "Content-Type": "application/json" }, body: "[]" });
+        } catch {
+            /* ignore */
+        }
+    },
 };
 
 export const useCanvasStore = create<CanvasStore>()(

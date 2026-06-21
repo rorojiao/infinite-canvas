@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { BookOpen, Keyboard, Settings2 } from "lucide-react";
+import { BookOpen, Keyboard, LogOut, Settings2 } from "lucide-react";
+import { Dropdown } from "antd";
 
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { GitHubLink } from "@/components/layout/github-link";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useUserStore } from "@/stores/use-user-store";
 
 type UserStatusActionsProps = {
     showConfig?: boolean;
@@ -23,6 +25,8 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const setTheme = useThemeStore((state) => state.setTheme);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const canvasTheme = canvasThemes[theme];
+    const user = useUserStore((state) => state.user);
+    const logout = useUserStore((state) => state.logout);
     const naturalIconClass = "inline-flex size-7 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white [&_svg]:size-4";
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
     const versionStyle = iconStyle;
@@ -34,8 +38,8 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
             <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className={naturalIconClass} style={iconStyle} aria-label="文档" title="文档">
                 <BookOpen className="size-4" />
             </a>
-            {showConfig ? (
-                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label="配置" title="配置">
+            {showConfig && user?.isAdmin ? (
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label="系统配置" title="系统配置（管理员）">
                     <Settings2 className="size-4" />
                 </button>
             ) : null}
@@ -46,6 +50,25 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                 <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label="快捷键" title="快捷键">
                     <Keyboard className="size-4" />
                 </button>
+            ) : null}
+            {user ? (
+                <Dropdown
+                    menu={{
+                        items: [
+                            {
+                                key: "logout",
+                                label: "退出登录",
+                                icon: <LogOut className="size-3.5" />,
+                                onClick: () => void logout(),
+                            },
+                        ],
+                    }}
+                >
+                    <button type="button" className={cn(naturalIconClass, "relative text-xs font-medium")} style={iconStyle} title={user.email}>
+                        {user.displayName?.[0]?.toUpperCase() || "U"}
+                        {user.isAdmin ? <span className="absolute -right-1 -top-1 rounded bg-amber-500 px-1 text-[9px] leading-tight text-white">管理员</span> : null}
+                    </button>
+                </Dropdown>
             ) : null}
         </div>
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Form, Input, Modal, Progress, Segmented, Select, Tabs } from "antd";
+import { App, Alert, Button, Form, Input, Modal, Progress, Segmented, Select, Tabs } from "antd";
 import { CircleAlert, Cloud, Plus, RefreshCw, Trash2, Wifi } from "lucide-react";
 import { useState } from "react";
 
@@ -10,6 +10,7 @@ import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent }
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
 import { createModelChannel, defaultBaseUrlForApiFormat, filterModelsByCapability, modelOptionLabel, modelOptionsFromChannels, normalizeModelOptionValue, useConfigStore, type AiConfig, type ApiCallFormat, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
 
 type ModelGroup = {
     capability: ModelCapability;
@@ -65,6 +66,7 @@ export function AppConfigModal() {
     const [syncingWebdav, setSyncingWebdav] = useState(false);
     const [webdavSyncStatus, setWebdavSyncStatus] = useState("");
     const [webdavDomainProgress, setWebdavDomainProgress] = useState(createWebdavDomainProgress);
+    const isAdmin = useUserStore((state) => state.user?.isAdmin) ?? false;
     const config = useConfigStore((state) => state.config);
     const webdav = useConfigStore((state) => state.webdav);
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -235,25 +237,28 @@ export function AppConfigModal() {
                         label: "渠道",
                         children: (
                             <Form layout="vertical" requiredMark={false}>
+                                {!isAdmin ? <Alert message="系统配置由管理员统一设置，此处为只读查看。" type="info" showIcon className="mb-4" /> : null}
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
                                     <div className="min-w-0 flex-1">
                                         <div className="flex w-fit max-w-full flex-wrap items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
                                             <CircleAlert className="size-3.5 shrink-0" />
                                             <span className="font-semibold">重要：</span>
-                                            <span>新增或拉取模型后，需要到“模型”Tab 选择可选项才会显示。</span>
+                                            <span>新增或拉取模型后，需要到"模型"Tab 选择可选项才会显示。</span>
                                             <Button type="link" size="small" className="h-auto p-0 text-xs font-semibold text-amber-900 dark:text-amber-100" onClick={() => setActiveTab("models")}>
                                                 去模型设置
                                             </Button>
                                         </div>
                                     </div>
-                                    <div className="flex shrink-0 gap-2">
-                                        <Button icon={<RefreshCw className="size-4" />} loading={Boolean(loadingChannelId)} onClick={() => void refreshAllModels()}>
-                                            拉取全部
-                                        </Button>
-                                        <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
-                                            新增渠道
-                                        </Button>
-                                    </div>
+                                    {isAdmin ? (
+                                        <div className="flex shrink-0 gap-2">
+                                            <Button icon={<RefreshCw className="size-4" />} loading={Boolean(loadingChannelId)} onClick={() => void refreshAllModels()}>
+                                                拉取全部
+                                            </Button>
+                                            <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
+                                                新增渠道
+                                            </Button>
+                                        </div>
+                                    ) : null}
                                 </div>
                                 <div className="space-y-3">
                                     {config.channels.map((channel) => (
@@ -265,28 +270,30 @@ export function AppConfigModal() {
                                                         {apiFormatLabel(channel.apiFormat)} · 已保存 {channel.models.length} 个模型
                                                     </div>
                                                 </div>
-                                                <div className="flex shrink-0 gap-2">
-                                                    <Button size="small" loading={loadingChannelId === channel.id} onClick={() => void refreshChannelModels(channel)}>
-                                                        拉取模型
-                                                    </Button>
-                                                    <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => deleteChannel(channel.id)} />
-                                                </div>
+                                                {isAdmin ? (
+                                                    <div className="flex shrink-0 gap-2">
+                                                        <Button size="small" loading={loadingChannelId === channel.id} onClick={() => void refreshChannelModels(channel)}>
+                                                            拉取模型
+                                                        </Button>
+                                                        <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => deleteChannel(channel.id)} />
+                                                    </div>
+                                                ) : null}
                                             </div>
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <Form.Item label="渠道名称" className="mb-0">
-                                                    <Input value={channel.name} onChange={(event) => updateChannel(channel.id, { name: event.target.value })} />
+                                                    <Input value={channel.name} disabled={!isAdmin} onChange={(event) => updateChannel(channel.id, { name: event.target.value })} />
                                                 </Form.Item>
                                                 <Form.Item label="调用格式" className="mb-0">
-                                                    <Select value={channel.apiFormat} options={apiFormatOptions} onChange={(value: ApiCallFormat) => updateChannelApiFormat(channel, value)} />
+                                                    <Select value={channel.apiFormat} disabled={!isAdmin} options={apiFormatOptions} onChange={(value: ApiCallFormat) => updateChannelApiFormat(channel, value)} />
                                                 </Form.Item>
                                                 <Form.Item label="Base URL" className="mb-0">
-                                                    <Input value={channel.baseUrl} onChange={(event) => updateChannel(channel.id, { baseUrl: event.target.value })} />
+                                                    <Input value={channel.baseUrl} disabled={!isAdmin} onChange={(event) => updateChannel(channel.id, { baseUrl: event.target.value })} />
                                                 </Form.Item>
                                                 <Form.Item label="API Key" className="mb-0">
-                                                    <Input.Password value={channel.apiKey} onChange={(event) => updateChannel(channel.id, { apiKey: event.target.value })} />
+                                                    <Input.Password value={isAdmin ? channel.apiKey : ""} disabled={!isAdmin} placeholder={isAdmin ? "" : "由管理员配置"} onChange={(event) => updateChannel(channel.id, { apiKey: event.target.value })} />
                                                 </Form.Item>
                                                 <Form.Item label="模型列表" className="mb-0 md:col-span-2">
-                                                    <Select mode="tags" showSearch allowClear maxTagCount="responsive" placeholder="输入模型名，或点击拉取模型" value={channel.models} onChange={(models) => updateChannel(channel.id, { models })} />
+                                                    <Select mode="tags" showSearch allowClear maxTagCount="responsive" disabled={!isAdmin} placeholder="输入模型名，或点击拉取模型" value={channel.models} onChange={(models) => updateChannel(channel.id, { models })} />
                                                 </Form.Item>
                                             </div>
                                         </section>
@@ -312,6 +319,7 @@ export function AppConfigModal() {
                                                 showSearch
                                                 allowClear
                                                 maxTagCount="responsive"
+                                                disabled={!isAdmin}
                                                 placeholder={config.models.length ? `请选择或输入${group.optionsLabel}` : "先到渠道里填写或拉取模型"}
                                                 value={config[group.modelsKey]}
                                                 options={modelOptions}
@@ -323,7 +331,9 @@ export function AppConfigModal() {
                                 <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                                     {modelGroups.map((group) => (
                                         <Form.Item key={group.modelKey} label={group.defaultLabel} className="mb-0">
-                                            <ModelPicker config={config} value={config[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth />
+                                            <div className={isAdmin ? undefined : "pointer-events-none opacity-60"}>
+                                                <ModelPicker config={config} value={config[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth />
+                                            </div>
                                         </Form.Item>
                                     ))}
                                 </div>
@@ -341,16 +351,17 @@ export function AppConfigModal() {
                                             type="number"
                                             min={1}
                                             max={15}
+                                            disabled={!isAdmin}
                                             value={config.canvasImageCount}
                                             onChange={(event) => updateConfig("canvasImageCount", event.target.value)}
                                             onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
                                         />
                                     </Form.Item>
                                     <Form.Item label="默认音频声音" className="mb-4">
-                                        <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
+                                        <Select value={config.audioVoice} disabled={!isAdmin} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
                                     </Form.Item>
                                     <Form.Item label="默认音频格式" className="mb-4">
-                                        <Select value={config.audioFormat} options={audioFormatOptions} onChange={(value) => updateConfig("audioFormat", value)} />
+                                        <Select value={config.audioFormat} disabled={!isAdmin} options={audioFormatOptions} onChange={(value) => updateConfig("audioFormat", value)} />
                                     </Form.Item>
                                     <Form.Item label="默认音频语速" className="mb-4">
                                         <Input
@@ -358,6 +369,7 @@ export function AppConfigModal() {
                                             min={0.25}
                                             max={4}
                                             step={0.05}
+                                            disabled={!isAdmin}
                                             value={config.audioSpeed}
                                             onChange={(event) => updateConfig("audioSpeed", event.target.value)}
                                             onBlur={(event) => updateConfig("audioSpeed", normalizeAudioSpeedValue(event.target.value))}
@@ -365,10 +377,10 @@ export function AppConfigModal() {
                                     </Form.Item>
                                 </div>
                                 <Form.Item label="默认音频指令" className="mb-4">
-                                    <Input.TextArea rows={2} value={config.audioInstructions} placeholder="例如：自然、温暖、适合旁白。" onChange={(event) => updateConfig("audioInstructions", event.target.value)} />
+                                    <Input.TextArea rows={2} disabled={!isAdmin} value={config.audioInstructions} placeholder="例如：自然、温暖、适合旁白。" onChange={(event) => updateConfig("audioInstructions", event.target.value)} />
                                 </Form.Item>
                                 <Form.Item label="系统提示词" className="mb-0">
-                                    <Input.TextArea rows={4} value={config.systemPrompt} placeholder="例如：你是一位擅长电影感写实摄影的视觉导演。" onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
+                                    <Input.TextArea rows={4} disabled={!isAdmin} value={config.systemPrompt} placeholder="例如：你是一位擅长电影感写实摄影的视觉导演。" onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
                                 </Form.Item>
                             </Form>
                         ),
@@ -428,7 +440,7 @@ export function AppConfigModal() {
                             </Form>
                         ),
                     },
-                ]}
+                ].filter((tab) => isAdmin || tab.key !== "webdav")}
             />
         </Modal>
     );

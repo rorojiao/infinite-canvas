@@ -2,8 +2,9 @@
 
 import { useMemo } from "react";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 import { nanoid } from "nanoid";
+import { useUserStore } from "@/stores/use-user-store";
 
 export type ApiCallFormat = "openai" | "gemini";
 
@@ -169,6 +170,45 @@ function isAiConfigReady(config: AiConfig, model: string) {
     return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
 }
 
+let configSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function isAdminUser() {
+    if (typeof window === "undefined") return false;
+    return Boolean(useUserStore.getState().user?.isAdmin);
+}
+
+const configStorage: PersistStorage<ConfigStore> = {
+    getItem: async () => {
+        if (typeof window === "undefined") return null;
+        try {
+            const res = await fetch("/api/config");
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!data) return null;
+            return { state: { config: data.config, webdav: data.webdav } as Pick<ConfigStore, "config" | "webdav">, version: 0 } as StorageValue<ConfigStore>;
+        } catch {
+            return null;
+        }
+    },
+    setItem: (_name, value) => {
+        const { config, webdav } = value.state;
+        if (typeof window !== "undefined") {
+            try {
+                const raw = localStorage.getItem("infinite-canvas:user_store");
+                const parsed = raw ? JSON.parse(raw) : null;
+                const isAdmin = parsed?.state?.user?.isAdmin;
+                if (isAdmin === false) return;
+            } catch { /* ignore */ }
+        }
+        if (configSaveTimer) clearTimeout(configSaveTimer);
+        configSaveTimer = setTimeout(() => {
+            configSaveTimer = null;
+            void fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config, webdav }) });
+        }, 500);
+    },
+    removeItem: async () => {},
+};
+
 export const useConfigStore = create<ConfigStore>()(
     persist(
         (set, get) => ({
@@ -197,6 +237,7 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
+            storage: configStorage,
             partialize: (state) => ({ config: state.config, webdav: state.webdav }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;

@@ -4,7 +4,6 @@ import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 
 import { nanoid } from "nanoid";
-import { localForageStorage } from "@/lib/localforage-storage";
 import { cleanupUnusedImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { cleanupUnusedMedia, resolveMediaUrl } from "@/services/file-storage";
 
@@ -38,31 +37,50 @@ type AssetStore = {
 };
 
 const ASSET_STORE_KEY = "infinite-canvas:asset_store";
+let assetSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 const assetStorage: PersistStorage<AssetStore> = {
-    getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
-        if (!value) return null;
-        const parsed = JSON.parse(value) as StorageValue<AssetStore>;
-        parsed.state.assets = await Promise.all(
-            parsed.state.assets.map(async (asset) => {
-                if (asset.kind === "video" && asset.data.storageKey) return { ...asset, data: { ...asset.data, url: await resolveMediaUrl(asset.data.storageKey, asset.data.url) } };
-                if (asset.kind !== "image") return asset;
-                if (asset.data.storageKey)
-                    return {
-                        ...asset,
-                        coverUrl: asset.coverUrl.startsWith("blob:") ? await resolveImageUrl(asset.data.storageKey, asset.coverUrl) : asset.coverUrl,
-                        data: { ...asset.data, dataUrl: await resolveImageUrl(asset.data.storageKey, asset.data.dataUrl) },
-                    };
-                if (!asset.data.dataUrl.startsWith("data:image/")) return asset;
-                const image = await uploadImage(asset.data.dataUrl);
-                return { ...asset, coverUrl: asset.coverUrl.startsWith("data:image/") ? image.url : asset.coverUrl, data: { ...asset.data, dataUrl: image.url, storageKey: image.storageKey, bytes: image.bytes, mimeType: image.mimeType } };
-            }),
-        );
-        return parsed;
+    getItem: async () => {
+        if (typeof window === "undefined") return null;
+        try {
+            const res = await fetch("/api/assets");
+            if (!res.ok) return null;
+            const assets = (await res.json()) as Asset[];
+            const resolved = await Promise.all(
+                assets.map(async (asset) => {
+                    if (asset.kind === "video" && asset.data.storageKey) return { ...asset, data: { ...asset.data, url: await resolveMediaUrl(asset.data.storageKey, asset.data.url) } };
+                    if (asset.kind !== "image") return asset;
+                    if (asset.data.storageKey)
+                        return {
+                            ...asset,
+                            coverUrl: asset.coverUrl.startsWith("blob:") ? await resolveImageUrl(asset.data.storageKey, asset.coverUrl) : asset.coverUrl,
+                            data: { ...asset.data, dataUrl: await resolveImageUrl(asset.data.storageKey, asset.data.dataUrl) },
+                        };
+                    if (!asset.data.dataUrl.startsWith("data:image/")) return asset;
+                    const image = await uploadImage(asset.data.dataUrl);
+                    return { ...asset, coverUrl: asset.coverUrl.startsWith("data:image/") ? image.url : asset.coverUrl, data: { ...asset.data, dataUrl: image.url, storageKey: image.storageKey, bytes: image.bytes, mimeType: image.mimeType } };
+                }),
+            );
+            return { state: { assets: resolved } as Pick<AssetStore, "assets">, version: 0 } as StorageValue<AssetStore>;
+        } catch {
+            return null;
+        }
     },
-    setItem: (name, value) => localForageStorage.setItem(name, JSON.stringify(value)),
-    removeItem: (name) => localForageStorage.removeItem(name),
+    setItem: (_name, value) => {
+        const assets = value.state.assets || [];
+        if (assetSaveTimer) clearTimeout(assetSaveTimer);
+        assetSaveTimer = setTimeout(() => {
+            assetSaveTimer = null;
+            void fetch("/api/assets", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(assets) });
+        }, 500);
+    },
+    removeItem: async () => {
+        try {
+            await fetch("/api/assets", { method: "PUT", headers: { "Content-Type": "application/json" }, body: "[]" });
+        } catch {
+            /* ignore */
+        }
+    },
 };
 
 export const useAssetStore = create<AssetStore>()(
