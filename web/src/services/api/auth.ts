@@ -1,4 +1,4 @@
-export type AuthUser = { id: string; email: string; displayName: string; isAdmin?: boolean };
+export type AuthUser = { id: string; email: string; displayName: string; isAdmin?: boolean; quota?: number; usedQuota?: number };
 
 export async function apiLogin(email: string, password: string): Promise<AuthUser> {
     const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });

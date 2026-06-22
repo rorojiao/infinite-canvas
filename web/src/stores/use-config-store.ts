@@ -21,6 +21,8 @@ export type AiConfig = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    /** 当前解析出的渠道 ID（由 resolveModelRequestConfig 设置，用于服务端代理路由） */
+    channelId?: string;
     channels: ModelChannel[];
     model: string;
     imageModel: string;
@@ -166,7 +168,8 @@ function modelListKey(capability: ModelCapability) {
 
 function isAiConfigReady(config: AiConfig, model: string) {
     const channel = resolveModelChannel(config, model);
-    return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
+    // API Key 由服务端代理注入，客户端无需校验，只需渠道 baseUrl 与模型就绪
+    return Boolean(model.trim() && channel.baseUrl.trim());
 }
 
 let configSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -342,6 +345,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
     return {
         ...config,
+        channelId: channel.id,
         model: modelOptionName(value || config.model),
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
