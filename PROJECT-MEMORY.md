@@ -13,7 +13,7 @@
 | 部署地址 | https://infcanvas.gamezipper.com（HTTPS，Let's Encrypt 证书） |
 | 备用域名 | http://infinite-canvas.gamezipper.com（仅 HTTP，无证书） |
 | 服务器 | 43.172.69.197 (CapRover，原 10.10.30.217 已迁移) |
-| Docker 镜像 | infinite-canvas:multi-user-v7（本地构建） |
+| Docker 镜像 | infinite-canvas:multi-user-v9（本地构建） |
 | GitHub | https://github.com/rorojiao/infinite-canvas（fork 自 basketikun） |
 | 管理员账号 | rorojiao@gmail.com（密码用户设定） |
 | 数据库 | SQLite，bind mount 到 host `/captain/data/infinite-canvas` |
@@ -71,6 +71,8 @@ CapRover captain-nginx
 - `web/src/app/api/ai/[...path]/route.ts` — 代理核心（maxDuration=300，流式透传）
 - `web/src/lib/ai-proxy.ts` — 客户端代理 URL/请求头构建（不含 key）
 - `web/src/services/api/{image,video,audio}.ts` — 已全部改走代理
+
+**v8/v9 修复（2026-06-23 PM review）**：①管理员降级收回无限额度 ②注册校验密码≥6/邮箱格式 ③代理响应附配额头+客户端拦截器实时刷新徽章 ④上游 4xx 计费不退还（仅 5xx/网络错误退还），消除并发放大窗口（quota=3 并发10：通过 6→3）。
 
 **⚠️ 2026-06-23 修复的安全漏洞**：`/api/config` GET 原先只对 `channels[].apiKey` 脱敏，顶层 `config.apiKey`（legacy 字段）明文泄露给非管理员。已修复为两者都脱敏。
 
@@ -137,13 +139,13 @@ DB bind mount 必须配置：`/captain/data/infinite-canvas:/app/data`。
 ### 重建镜像
 ```bash
 cd /infinite-canvas
-docker build -t infinite-canvas:multi-user-v7 .
+docker build -t infinite-canvas:multi-user-v9 .
 ```
 
 ### 部署新版本
 ```bash
 JWT=$(cat /infinite-canvas/.jwt_secret)
-docker service update --image infinite-canvas:multi-user-v7 --env-add JWT_SECRET=*** srv-captain--infinite-canvas
+docker service update --image infinite-canvas:multi-user-v9 --env-add JWT_SECRET=*** srv-captain--infinite-canvas
 ```
 
 ### 检查 nginx 反代是否生效
