@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { getJwtKey } from "./lib/jwt-secret";
 
 const COOKIE_NAME = "ic-auth-token";
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || "infinite-canvas-dev-secret-change-in-production");
 const PUBLIC_PATHS = ["/login", "/register"];
 
 export async function proxy(request: NextRequest) {
@@ -12,9 +12,12 @@ export async function proxy(request: NextRequest) {
     let authenticated = false;
 
     if (token) {
+        const jwtKey = getJwtKey({ allowMissing: true });
         try {
-            await jwtVerify(token, secret);
-            authenticated = true;
+            if (jwtKey) {
+                await jwtVerify(token, jwtKey);
+                authenticated = true;
+            }
         } catch {
             authenticated = false;
         }

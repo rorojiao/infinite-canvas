@@ -2,9 +2,8 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { db } from "./db";
+import { getJwtKey } from "./jwt-secret";
 
-const secret = process.env.JWT_SECRET || "infinite-canvas-dev-secret-change-in-production";
-const JWT_KEY = new TextEncoder().encode(secret);
 const COOKIE_NAME = "ic-auth-token";
 const MAX_AGE = 7 * 24 * 60 * 60;
 
@@ -19,13 +18,13 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 export async function createToken(userId: string) {
-    return new SignJWT({ sub: userId }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(`${MAX_AGE}s`).sign(JWT_KEY);
+    return new SignJWT({ sub: userId }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(`${MAX_AGE}s`).sign(getJwtKey());
 }
 
 export async function verifyToken(token: string): Promise<{ sub: string } | null> {
     try {
-        const { payload } = await jwtVerify(token, JWT_KEY);
-        return { sub: payload.sub! };
+        const { payload } = await jwtVerify(token, getJwtKey());
+        return typeof payload.sub === "string" && payload.sub ? { sub: payload.sub } : null;
     } catch {
         return null;
     }
