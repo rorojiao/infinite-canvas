@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSession, consumeQuota, refundQuota } from "@/lib/auth";
+import { getSession, consumeQuota, refundQuota, UNLIMITED_QUOTA } from "@/lib/auth";
 import type { AiConfig, ModelChannel } from "@/stores/use-config-store";
 
 export const runtime = "nodejs";
@@ -77,6 +77,21 @@ function buildUpstreamHeaders(req: NextRequest, channel: ResolvedChannel): Heade
     return headers;
 }
 
+
+/** 读取用户最新配额，生成响应头供客户端实时刷新额度徽章 */
+function quotaResponseHeaders(userId: string): Record<string, string> {
+    const row = db.prepare("SELECT quota, used_quota FROM users WHERE id = ?").get(userId) as { quota: number; used_quota: number } | undefined;
+    if (!row) return {};
+    const remaining = row.quota === UNLIMITED_QUOTA ? -1 : Math.max(0, row.quota - row.used_quota);
+    return { "x-ic-quota-remaining": String(remaining), "x-ic-quota-used": String(row.used_quota) };
+}
+
+/** 把配额响应头合并到给定 Headers */
+function withQuota(headers: Headers, userId: string): Headers {
+    for (const [k, v] of Object.entries(quotaResponseHeaders(userId))) headers.set(k, v);
+    return headers;
+}
+
 async function handleProxy(req: NextRequest, segments: string[]): Promise<Response> {
     if (segments.length < 2) {
         return Response.json({ error: "无效的代理路径" }, { status: 400 });
@@ -111,9 +126,11 @@ async function handleProxy(req: NextRequest, segments: string[]): Promise<Respon
 
     // 原子检查并扣除配额（管理员为无限额度 -1）
     if (!consumeQuota(session.id, cost)) {
-        return Response.json(
-            { error: "配额不足，请联系管理员分配额度", quota: session.quota, usedQuota: session.usedQuota },
-            { status: 403 },
+        const headers403 = new Headers({ "Content-Type": "application/json" });
+        withQuota(headers403, session.id);
+        return new Response(
+            JSON.stringify({ error: "配额不足，请联系管理员分配额度", quota: session.quota, usedQuota: session.usedQuota }),
+            { status: 403, headers: headers403 },
         );
     }
 
@@ -129,17 +146,19 @@ async function handleProxy(req: NextRequest, segments: string[]): Promise<Respon
         upstream = await fetch(targetUrl, fetchOptions);
     } catch {
         refundQuota(session.id, cost);
-        return Response.json({ error: "请求上游服务失败，请检查渠道配置或稍后重试" }, { status: 502 });
+        const headers502 = new Headers({ "Content-Type": "application/json" });
+        withQuota(headers502, session.id);
+        return new Response(JSON.stringify({ error: "请求上游服务失败，请检查渠道配置或稍后重试" }), { status: 502, headers: headers502 });
     }
 
-    // 上游返回错误状态：退还配额
+    // 上游返回错误状态：
+    //   - 5xx（服务端错误）视为上游故障，退还配额（不惩罚用户）；
+    //   - 4xx（客户端错误，如模型名错误、参数非法）计费不退还，避免"快速失败→退还→再放行"的并发放大窗口。
     if (!upstream.ok) {
-        refundQuota(session.id, cost);
+        if (upstream.status >= 500) refundQuota(session.id, cost);
         const errorText = await upstream.text();
-        return new Response(errorText, {
-            status: upstream.status,
-            headers: { "Content-Type": upstream.headers.get("content-type") || "application/json" },
-        });
+        const errHeaders = withQuota(new Headers({ "Content-Type": upstream.headers.get("content-type") || "application/json" }), session.id);
+        return new Response(errorText, { status: upstream.status, headers: errHeaders });
     }
 
     // 成功：流式透传上游响应体（支持 SSE / 二进制 / JSON）
@@ -148,6 +167,7 @@ async function handleProxy(req: NextRequest, segments: string[]): Promise<Respon
     if (responseContentType) responseHeaders.set("Content-Type", responseContentType);
     const contentDisposition = upstream.headers.get("content-disposition");
     if (contentDisposition) responseHeaders.set("Content-Disposition", contentDisposition);
+    withQuota(responseHeaders, session.id);
     return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
 

@@ -60,6 +60,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         } else if (!body.isAdmin && row.is_admin) {
             updates.push("is_admin = ?");
             values.push(0);
+            // 降级时收回无限额度：若未显式指定新配额，重置为 0，避免被降级管理员保留免费无限权限
+            if (body.quota === undefined || body.quota === null) {
+                updates.push("quota = ?");
+                values.push(0);
+            }
         }
     }
 

@@ -8,7 +8,9 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
     const { email, password, displayName } = await request.json();
     if (!email || !password) return NextResponse.json({ error: "请输入邮箱和密码" }, { status: 400 });
-    const lowerEmail = email.toLowerCase();
+    if (String(password).length < 6) return NextResponse.json({ error: "密码至少 6 位" }, { status: 400 });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) return NextResponse.json({ error: "邮箱格式不正确" }, { status: 400 });
+    const lowerEmail = String(email).toLowerCase().trim();
     const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(lowerEmail);
     if (existing) return NextResponse.json({ error: "该邮箱已注册" }, { status: 409 });
     const id = nanoid();
