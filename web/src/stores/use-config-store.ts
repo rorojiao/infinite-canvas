@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 import { nanoid } from "nanoid";
-import { useUserStore } from "@/stores/use-user-store";
 
 export type ApiCallFormat = "openai" | "gemini";
 
@@ -100,7 +99,7 @@ export const defaultConfig: AiConfig = {
     quality: "auto",
     size: "1:1",
     count: "1",
-    canvasImageCount: "3",
+    canvasImageCount: "1",
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -172,11 +171,6 @@ function isAiConfigReady(config: AiConfig, model: string) {
 
 let configSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function isAdminUser() {
-    if (typeof window === "undefined") return false;
-    return Boolean(useUserStore.getState().user?.isAdmin);
-}
-
 const configStorage: PersistStorage<ConfigStore> = {
     getItem: async () => {
         if (typeof window === "undefined") return null;
@@ -192,14 +186,6 @@ const configStorage: PersistStorage<ConfigStore> = {
     },
     setItem: (_name, value) => {
         const { config, webdav } = value.state;
-        if (typeof window !== "undefined") {
-            try {
-                const raw = localStorage.getItem("infinite-canvas:user_store");
-                const parsed = raw ? JSON.parse(raw) : null;
-                const isAdmin = parsed?.state?.user?.isAdmin;
-                if (isAdmin === false) return;
-            } catch { /* ignore */ }
-        }
         if (configSaveTimer) clearTimeout(configSaveTimer);
         configSaveTimer = setTimeout(() => {
             configSaveTimer = null;
@@ -268,7 +254,7 @@ export const useConfigStore = create<ConfigStore>()(
                         vquality: config.vquality || "720",
                         videoGenerateAudio: config.videoGenerateAudio || "true",
                         videoWatermark: config.videoWatermark || "false",
-                        canvasImageCount: config.canvasImageCount || "3",
+                        canvasImageCount: config.canvasImageCount || "1",
                         imageModels: Array.isArray(persistedConfig.imageModels) ? normalizeModelList(config.imageModels, channels) : filterModelsByCapability(models, "image"),
                         videoModels: Array.isArray(persistedConfig.videoModels) ? normalizeModelList(config.videoModels, channels) : filterModelsByCapability(models, "video"),
                         textModels: Array.isArray(persistedConfig.textModels) ? normalizeModelList(config.textModels, channels) : filterModelsByCapability(models, "text"),
