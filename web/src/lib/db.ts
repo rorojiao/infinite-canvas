@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { runBillingMigration } from "./billing/migration";
+
 const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
 const DB_PATH = join(DATA_DIR, "infinite-canvas.db");
 
@@ -45,6 +47,7 @@ function getDb() {
   CREATE INDEX IF NOT EXISTS idx_assets_user ON assets(user_id);
 `);
     migrateUsersQuota(_db);
+    runBillingMigration(_db);
     return _db;
 }
 

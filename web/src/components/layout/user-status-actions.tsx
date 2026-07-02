@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Keyboard, LogOut, Settings2, UserCog } from "lucide-react";
+import { BarChart3, BookOpen, Keyboard, LogOut, Settings2, UserCog, Wallet } from "lucide-react";
 import { Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 
@@ -47,8 +47,20 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                       icon: <UserCog className="size-3.5" />,
                       onClick: () => router.push("/admin/users"),
                   },
+                  {
+                      key: "admin-billing-dashboard",
+                      label: "收入统计",
+                      icon: <BarChart3 className="size-3.5" />,
+                      onClick: () => router.push("/admin/billing/dashboard"),
+                  },
               ]
             : []),
+        {
+            key: "billing",
+            label: "充值中心",
+            icon: <Wallet className="size-3.5" />,
+            onClick: () => router.push("/billing"),
+        },
         {
             key: "logout",
             label: "退出登录",
